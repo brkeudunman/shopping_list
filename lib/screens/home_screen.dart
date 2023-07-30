@@ -29,31 +29,44 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _loadItems() async {
     final url = Uri.https(
-        'axx.firebaseio.com',
+        'flutter-shopping-list-d2e37-default-rtdb.firebaseio.com',
         'flutter-shopping-list.json');
-    final response = await http.get(url);
-    if (response.statusCode >= 400) {
+    try{
+      final response = await http.get(url);
+      if (response.statusCode >= 400) {
+        setState(() {
+          _isLoading = false;
+          _isError = true;
+        });
+      }
+      if (response.body == 'null') {
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+      final Map<String, dynamic> listData = jsonDecode(response.body);
+      final List<GroceryItem> loadedItems = [];
+      for (final item in listData.entries) {
+        var category = categories.entries.firstWhere(
+                (cateItem) => cateItem.value.title == item.value['category']);
+        loadedItems.add(GroceryItem(
+            id: item.key,
+            name: item.value['name'],
+            quantity: item.value['quantity'],
+            category: category.value));
+      }
+      setState(() {
+        groceryItems = loadedItems;
+        _isLoading = false;
+      });
+    } catch (error){
       setState(() {
         _isLoading = false;
         _isError = true;
       });
     }
-    final Map<String, dynamic> listData = jsonDecode(response.body);
-    final List<GroceryItem> loadedItems = [];
-    for (final item in listData.entries) {
-      var category = categories.entries.firstWhere(
-          (cateItem) => cateItem.value.title == item.value['category']);
-      loadedItems.add(GroceryItem(
-          id: item.key,
-          name: item.value['name'],
-          quantity: item.value['quantity'],
-          category: category.value));
-    }
-    ;
-    setState(() {
-      groceryItems = loadedItems;
-      _isLoading = false;
-    });
+
   }
 
   void _addItem() async {
@@ -72,25 +85,29 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  void _removeItem(index) {
-    GroceryItem temp = groceryItems[index];
-    ScaffoldMessenger.of(context).clearSnackBars();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("${groceryItems[index].name} is deleted"),
-        action: SnackBarAction(
-          label: "Undo",
-          onPressed: () {
-            setState(() {
-              groceryItems.insert(index, temp);
-            });
-          },
-        ),
-      ),
-    );
+  void _removeItem(index) async {
+    print(index);
+    GroceryItem tempGroceryItem = groceryItems[index];
     setState(() {
       groceryItems.removeAt(index);
     });
+
+    final url = Uri.https(
+        'flutter-shopping-list-d2e37-default-rtdb.firebaseio.com',
+        'flutter-shopping-list/${tempGroceryItem.id}.json');
+
+    final response = await http.delete(url);
+
+    if (response.statusCode >= 400) {
+      ScaffoldMessenger.of(context).clearSnackBars();
+      setState(() {
+        groceryItems.insert(index, tempGroceryItem);
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text(
+              "An error has occured while deleting. Undoing the operation"),
+        ));
+      });
+    }
   }
 
   @override
@@ -103,12 +120,11 @@ class _HomeScreenState extends State<HomeScreen> {
       _listContent = const Center(
         child: CircularProgressIndicator(
           semanticsLabel: "Loading",
-          strokeWidth: 1,
         ),
       );
     }
 
-    if(_isError){
+    if (_isError) {
       _listContent = const Center(
         child: Card(
           color: Colors.red,
