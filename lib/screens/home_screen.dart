@@ -29,7 +29,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _loadItems() async {
     final url = Uri.https(
-        'flutter-shopping-list-d2e37-default-rtdb.firebaseio.com',
+        'null.com',
         'flutter-shopping-list.json');
     try{
       final response = await http.get(url);
@@ -93,7 +93,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     final url = Uri.https(
-        'flutter-shopping-list-d2e37-default-rtdb.firebaseio.com',
+        'null.firebaseio.com',
         'flutter-shopping-list/${tempGroceryItem.id}.json');
 
     final response = await http.delete(url);
