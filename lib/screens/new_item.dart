@@ -1,7 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:shopping_list/data/categories.dart';
+import 'package:http/http.dart' as http;
 import 'package:shopping_list/models/grocery_item.dart';
-
 import '../models/categories.dart';
 
 class NewItem extends StatefulWidget {
@@ -18,20 +20,37 @@ class _NewItemState extends State<NewItem> {
   var _enteredQuantity = 1;
   var _selectedCategory = categories[Categories.vegetables]!;
   final _formKey = GlobalKey<FormState>();
+  bool _isSending = false;
 
-  void _saveItem() {
+  void _saveItem() async {
     if (_formKey.currentState!.validate()) {
       _formKey.currentState!.save();
-      Navigator.of(context).pop(
-        GroceryItem(
-            id: DateTime.now().toString(),
-            name: _enteredName,
-            quantity: _enteredQuantity,
-            category: _selectedCategory),
+      setState(() {
+        _isSending = true;
+      });
+      final url = Uri.https(
+          'axx.firebaseio.com',
+          'flutter-shopping-list.json');
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode(
+          {
+            'name': _enteredName,
+            'quantity': _enteredQuantity,
+            'category': _selectedCategory.title,
+          },
+        ),
       );
-      print(_enteredName);
-      print(_enteredQuantity);
-      print(_selectedCategory.title);
+      if (!context.mounted) {
+        return;
+      }
+      final Map<String, dynamic> resData = jsonDecode(response.body);
+      Navigator.of(context).pop(GroceryItem(
+          id: resData['name'],
+          name: _enteredName,
+          quantity: _enteredQuantity,
+          category: _selectedCategory));
     }
   }
 
@@ -75,7 +94,7 @@ class _NewItemState extends State<NewItem> {
                       validator: (value) {
                         if (value == null ||
                             value.isEmpty ||
-                            value.trim().length <= 0) {
+                            value.trim().isEmpty) {
                           return "Must be between 1 and 50 characters..";
                         } else if (int.tryParse(value) == null ||
                             int.tryParse(value)! <= 0) {
@@ -131,17 +150,23 @@ class _NewItemState extends State<NewItem> {
                 children: [
                   TextButton(
                       onPressed: () {
-                        _formKey.currentState!.reset();
+                        _isSending ? null : _formKey.currentState!.reset();
                       },
                       child: const Text("Reset")),
                   ElevatedButton(
-                    onPressed: _saveItem,
-                    child: const Text(
-                      "Submit",
-                      style: TextStyle(
-                        color: Colors.white,
-                      ),
-                    ),
+                    onPressed: _isSending ? null : _saveItem,
+                    child: !_isSending
+                        ? const Text(
+                            "Submit",
+                            style: TextStyle(
+                              color: Colors.white,
+                            ),
+                          )
+                        : const SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(),
+                          ),
                   )
                 ],
               )

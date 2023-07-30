@@ -1,6 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:shopping_list/data/categories.dart';
 import 'package:shopping_list/models/grocery_item.dart';
 import 'package:shopping_list/screens/new_item.dart';
+import 'package:http/http.dart' as http;
+
+import '../models/category.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -10,49 +16,124 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  final List<GroceryItem> groceryItems = [];
+  List<GroceryItem> groceryItems = [];
+  bool _isLoading = true;
+  bool _isError = false;
+
+  @override
+  void initState() {
+    // TODO: implement initState
+    super.initState();
+    _loadItems();
+  }
+
+  void _loadItems() async {
+    final url = Uri.https(
+        'axx.firebaseio.com',
+        'flutter-shopping-list.json');
+    final response = await http.get(url);
+    if (response.statusCode >= 400) {
+      setState(() {
+        _isLoading = false;
+        _isError = true;
+      });
+    }
+    final Map<String, dynamic> listData = jsonDecode(response.body);
+    final List<GroceryItem> loadedItems = [];
+    for (final item in listData.entries) {
+      var category = categories.entries.firstWhere(
+          (cateItem) => cateItem.value.title == item.value['category']);
+      loadedItems.add(GroceryItem(
+          id: item.key,
+          name: item.value['name'],
+          quantity: item.value['quantity'],
+          category: category.value));
+    }
+    ;
+    setState(() {
+      groceryItems = loadedItems;
+      _isLoading = false;
+    });
+  }
 
   void _addItem() async {
-    final _newItem = await Navigator.of(context).push<GroceryItem>(
+    var newItem = await Navigator.of(context).push<GroceryItem>(
       MaterialPageRoute(
         builder: (ctx) {
-          return NewItem();
+          return const NewItem();
         },
       ),
     );
-    if (_newItem == null) {
+    if (newItem == null) {
       return;
     }
     setState(() {
-      groceryItems.add(_newItem);
+      groceryItems.add(newItem);
+    });
+  }
+
+  void _removeItem(index) {
+    GroceryItem temp = groceryItems[index];
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("${groceryItems[index].name} is deleted"),
+        action: SnackBarAction(
+          label: "Undo",
+          onPressed: () {
+            setState(() {
+              groceryItems.insert(index, temp);
+            });
+          },
+        ),
+      ),
+    );
+    setState(() {
+      groceryItems.removeAt(index);
     });
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Your Groceries"),
-        actions: [
-          IconButton(
-            onPressed: _addItem,
-            icon: const Icon(Icons.add),
-          )
-        ],
-      ),
-      body: ListView.builder(
+    Widget _listContent = const Center(
+      child: Text("No items found"),
+    );
+
+    if (_isLoading) {
+      _listContent = const Center(
+        child: CircularProgressIndicator(
+          semanticsLabel: "Loading",
+          strokeWidth: 1,
+        ),
+      );
+    }
+
+    if(_isError){
+      _listContent = const Center(
+        child: Card(
+          color: Colors.red,
+          margin: EdgeInsets.zero,
+          child: Padding(
+            padding: EdgeInsets.all(24.0),
+            child: Text(
+              "Something is not right here...",
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    if (groceryItems.isNotEmpty) {
+      _listContent = ListView.builder(
         itemCount: groceryItems.length,
         itemBuilder: (ctx, index) => Dismissible(
-          key: Key(groceryItems[index].name), // Unique key for each item
+          key: Key(groceryItems[index].name),
           onDismissed: (direction) {
-            ScaffoldMessenger.of(context).clearSnackBars();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                  content: Text("${groceryItems[index].name} is deleted")),
-            );
-            setState(() {
-              groceryItems.removeAt(index);
-            });
+            _removeItem(index);
           },
           background: Container(
             color: Colors.red,
@@ -68,12 +149,25 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
               trailing: Text(
                 groceryItems[index].quantity.toString(),
-                style: Theme.of(context).textTheme.bodyText2,
+                style: Theme.of(context).textTheme.bodyMedium,
               ),
             ),
           ),
         ),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text("Your Groceries"),
+        actions: [
+          IconButton(
+            onPressed: _addItem,
+            icon: const Icon(Icons.add),
+          )
+        ],
       ),
+      body: _listContent,
     );
   }
 }
